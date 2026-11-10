@@ -26,7 +26,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        420,
+        400,
         340
       ]
     },
@@ -57,7 +57,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        660,
+        620,
         340
       ]
     },
@@ -70,7 +70,7 @@
           "parameters": [
             {
               "name": "ipAddress",
-              "value": "={{ $json.ioc_ip }}"
+              "value": "={{ $('2. Extract IOCs & 15m Dedup').first().json.ioc_ip }}"
             },
             {
               "name": "maxAgeInDays",
@@ -97,15 +97,15 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
-        120
+        860,
+        140
       ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.greynoise.io/v3/community/{{ $json.ioc_ip }}",
+        "url": "=https://api.greynoise.io/v3/community/{{ $('2. Extract IOCs & 15m Dedup').first().json.ioc_ip }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -125,7 +125,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
+        860,
         280
       ],
       "continueOnFail": true
@@ -133,7 +133,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://www.virustotal.com/api/v3/files/{{ $json.ioc_sha256 }}",
+        "url": "=https://www.virustotal.com/api/v3/files/{{ $('2. Extract IOCs & 15m Dedup').first().json.ioc_sha256 }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -149,34 +149,34 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        960,
-        440
+        860,
+        420
       ],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const alert = $input.first().json;\nconst assets = {\n  \"FINANCE-SRV-01\": { department: \"Finance\", criticality: \"CRITICAL (Tier-0 Crown Jewel)\", owner: \"secops@corp.local\" },\n  \"AD-DC-01\": { department: \"Core Infra\", criticality: \"CRITICAL (Tier-0 Domain Controller)\", owner: \"infra@corp.local\" }\n};\nconst ctx = assets[alert.hostname] ? assets[alert.hostname] : { department: \"Enterprise\", criticality: \"MEDIUM (Tier-2)\", owner: \"it@corp.local\" };\nreturn [{ json: { hostname: alert.hostname, asset_context: ctx } }];"
+        "jsCode": "const alert = $('2. Extract IOCs & 15m Dedup').first().json;\nconst assets = {\n  \"FINANCE-SRV-01\": { department: \"Finance\", criticality: \"CRITICAL (Tier-0 Crown Jewel)\", owner: \"secops@corp.local\" },\n  \"AD-DC-01\": { department: \"Core Infra\", criticality: \"CRITICAL (Tier-0 Domain Controller)\", owner: \"infra@corp.local\" }\n};\nconst ctx = assets[alert.hostname] ? assets[alert.hostname] : { department: \"Enterprise\", criticality: \"MEDIUM (Tier-2)\", owner: \"it@corp.local\" };\nreturn [{ json: { hostname: alert.hostname, asset_context: ctx } }];"
       },
       "id": "node-4d",
       "name": "4d. Asset Criticality CMDB",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
-        600
+        860,
+        560
       ]
     },
     {
       "parameters": {
-        "jsCode": "const baseAlert = $('2. Extract IOCs & 15m Dedup').first().json;\nconst abuseData = $('4a. AbuseIPDB Lookup').first()?.json?.data;\nconst gnData = $('4b. GreyNoise Scanner Check').first()?.json;\nconst vtStats = $('4c. VirusTotal Hash Lookup').first()?.json?.data?.attributes?.last_analysis_stats;\nconst assetInfo = $('4d. Asset Criticality CMDB').first()?.json?.asset_context;\nreturn [{\n  json: {\n    alert_telemetry: baseAlert,\n    asset_cmdb: assetInfo ? assetInfo : {},\n    threat_intelligence: {\n      abuseipdb_score: abuseData?.abuseConfidenceScore !== undefined ? abuseData.abuseConfidenceScore : \"Pending Key\",\n      greynoise_scanner: gnData?.noise !== undefined ? gnData.noise : false,\n       greynoise_classification: gnData?.classification ? gnData.classification : \"unknown\",\n      virustotal_malicious: vtStats?.malicious !== undefined ? vtStats.malicious : 0\n    }\n  }\n}];"
+        "jsCode": "function safeGet(nodeName) {\n  try {\n    return $(nodeName).first()?.json;\n  } catch (e) {\n    return {};\n  }\n}\nconst baseAlert = safeGet('2. Extract IOCs & 15m Dedup');\nconst abuseRes = safeGet('4a. AbuseIPDB Lookup');\nconst gnData = safeGet('4b. GreyNoise Scanner Check');\nconst vtRes = safeGet('4c. VirusTotal Hash Lookup');\nconst assetRes = safeGet('4d. Asset Criticality CMDB');\n\nconst abuseData = abuseRes?.data ? abuseRes.data : {};\nconst vtStats = vtRes?.data?.attributes?.last_analysis_stats ? vtRes.data.attributes.last_analysis_stats : {};\nconst assetInfo = assetRes?.asset_context ? assetRes.asset_context : {};\n\nreturn [{\n  json: {\n    alert_telemetry: baseAlert,\n    asset_cmdb: assetInfo,\n    threat_intelligence: {\n      abuseipdb_score: abuseData.abuseConfidenceScore !== undefined ? abuseData.abuseConfidenceScore : \"Pending Key\",\n      greynoise_scanner: gnData?.noise !== undefined ? gnData.noise : false,\n      greynoise_classification: gnData?.classification ? gnData.classification : \"unknown\",\n      virustotal_malicious: vtStats.malicious !== undefined ? vtStats.malicious : 0\n    }\n  }\n}];"
       },
       "id": "node-5",
       "name": "5. Aggregate Enriched Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1280,
+        1160,
         340
       ]
     },
@@ -206,7 +206,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1520,
+        1400,
         340
       ],
       "continueOnFail": true
@@ -220,7 +220,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
+        1640,
         340
       ]
     },
@@ -237,7 +237,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2000,
+        1880,
         340
       ],
       "continueOnFail": true
@@ -302,21 +302,6 @@
             "node": "4a. AbuseIPDB Lookup",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "4b. GreyNoise Scanner Check",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "4c. VirusTotal Hash Lookup",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "4d. Asset Criticality CMDB",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -325,7 +310,7 @@
       "main": [
         [
           {
-            "node": "5. Aggregate Enriched Context",
+            "node": "4b. GreyNoise Scanner Check",
             "type": "main",
             "index": 0
           }
@@ -336,7 +321,7 @@
       "main": [
         [
           {
-            "node": "5. Aggregate Enriched Context",
+            "node": "4c. VirusTotal Hash Lookup",
             "type": "main",
             "index": 0
           }
@@ -347,7 +332,7 @@
       "main": [
         [
           {
-            "node": "5. Aggregate Enriched Context",
+            "node": "4d. Asset Criticality CMDB",
             "type": "main",
             "index": 0
           }

