@@ -1,0 +1,5 @@
+wazuh-docker/
+.env
+*.pem
+*.key
+*secret*
