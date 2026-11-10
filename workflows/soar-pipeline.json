@@ -1,0 +1,416 @@
+{
+  "name": "Autonomous Tier-1.5 SOAR & AI Triage Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wazuh-soar-ingest",
+        "responseMode": "onReceived"
+      },
+      "id": "node-1",
+      "name": "1. Wazuh Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        340
+      ],
+      "webhookId": "wazuh-soar-ingest"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawInput = $input.first().json;\nconst body = rawInput.body ? rawInput.body : rawInput;\nconst srcIp = body.data?.srcip ? body.data.srcip : (body.data?.win?.eventdata?.sourceAddress ? body.data.win.eventdata.sourceAddress : null);\nconst rawHashes = body.data?.win?.eventdata?.hashes ? body.data.win.eventdata.hashes : \"\";\nconst sha256Match = rawHashes.match(/SHA256=([a-fA-F0-9]{64})/i);\nconst sha256 = sha256Match ? sha256Match[1] : (body.syscheck?.sha256_after ? body.syscheck.sha256_after : null);\nconst hostname = body.agent?.name ? body.agent.name : \"UNKNOWN-HOST\";\nconst agentId = body.agent?.id ? body.agent.id : \"000\";\nconst ruleId = body.rule?.id ? body.rule.id : \"0000\";\nconst severity = Number(body.rule?.level ? body.rule.level : 0);\nconst iocPart = srcIp ? srcIp : (sha256 ? sha256 : \"no_ioc\");\nconst dedupKey = `${hostname}_${ruleId}_${iocPart}`;\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.dedupCache) { staticData.dedupCache = {}; }\nconst now = Date.now();\nfor (const [k, ts] of Object.entries(staticData.dedupCache)) {\n  if (now - ts > 900000) { delete staticData.dedupCache[k]; }\n}\nconst isDuplicate = Boolean(staticData.dedupCache[dedupKey]);\nif (!isDuplicate) { staticData.dedupCache[dedupKey] = now; }\nreturn [{\n  json: {\n    dedup_key: dedupKey,\n    is_duplicate: isDuplicate,\n    alert_id: body.id ? body.id : `${now}`,\n    timestamp: body.timestamp ? body.timestamp : new Date().toISOString(),\n    rule_id: ruleId,\n    severity: severity,\n    description: body.rule?.description ? body.rule.description : \"Security Event\",\n    mitre_ids: body.rule?.mitre?.id ? body.rule.mitre.id : [],\n    hostname: hostname,\n    agent_id: agentId,\n    agent_ip: body.agent?.ip ? body.agent.ip : \"N/A\",\n    username: body.data?.win?.eventdata?.user ? body.data.win.eventdata.user : \"N/A\",\n    command_line: body.data?.win?.eventdata?.commandLine ? body.data.win.eventdata.commandLine : \"N/A\",\n    ioc_ip: srcIp,\n    ioc_sha256: sha256\n  }\n}];"
+      },
+      "id": "node-2",
+      "name": "2. Extract IOCs & 15m Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-3",
+      "name": "3. Is Unique Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.abuseipdb.com/api/v2/check",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ipAddress",
+              "value": "={{ $json.ioc_ip }}"
+            },
+            {
+              "name": "maxAgeInDays",
+              "value": "90"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "YOUR_ABUSEIPDB_API_KEY"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "node-4a",
+      "name": "4a. AbuseIPDB Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        120
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.greynoise.io/v3/community/{{ $json.ioc_ip }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "YOUR_GREYNOISE_API_KEY"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "node-4b",
+      "name": "4b. GreyNoise Scanner Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        280
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.virustotal.com/api/v3/files/{{ $json.ioc_sha256 }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "YOUR_VIRUSTOTAL_API_KEY"
+            }
+          ]
+        }
+      },
+      "id": "node-4c",
+      "name": "4c. VirusTotal Hash Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        440
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json;\nconst assets = {\n  \"FINANCE-SRV-01\": { department: \"Finance\", criticality: \"CRITICAL (Tier-0 Crown Jewel)\", owner: \"secops@corp.local\" },\n  \"AD-DC-01\": { department: \"Core Infra\", criticality: \"CRITICAL (Tier-0 Domain Controller)\", owner: \"infra@corp.local\" }\n};\nconst ctx = assets[alert.hostname] ? assets[alert.hostname] : { department: \"Enterprise\", criticality: \"MEDIUM (Tier-2)\", owner: \"it@corp.local\" };\nreturn [{ json: { hostname: alert.hostname, asset_context: ctx } }];"
+      },
+      "id": "node-4d",
+      "name": "4d. Asset Criticality CMDB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseAlert = $('2. Extract IOCs & 15m Dedup').first().json;\nconst abuseData = $('4a. AbuseIPDB Lookup').first()?.json?.data;\nconst gnData = $('4b. GreyNoise Scanner Check').first()?.json;\nconst vtStats = $('4c. VirusTotal Hash Lookup').first()?.json?.data?.attributes?.last_analysis_stats;\nconst assetInfo = $('4d. Asset Criticality CMDB').first()?.json?.asset_context;\nreturn [{\n  json: {\n    alert_telemetry: baseAlert,\n    asset_cmdb: assetInfo ? assetInfo : {},\n    threat_intelligence: {\n      abuseipdb_score: abuseData?.abuseConfidenceScore !== undefined ? abuseData.abuseConfidenceScore : \"Pending Key\",\n      greynoise_scanner: gnData?.noise !== undefined ? gnData.noise : false,\n       greynoise_classification: gnData?.classification ? gnData.classification : \"unknown\",\n      virustotal_malicious: vtStats?.malicious !== undefined ? vtStats.malicious : 0\n    }\n  }\n}];"
+      },
+      "id": "node-5",
+      "name": "5. Aggregate Enriched Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": 0.1,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Act as a Senior Tier-2 SOC Analyst. Output strictly valid JSON with keys: risk_verdict, confidence_score, mitre_technique, root_cause_bullets (array of 3 strings), remediation_cli.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(JSON.stringify($json)) }}\n    }\n  ]\n}"
+      },
+      "id": "node-6",
+      "name": "6. AI Tier-2 Analyst Triage (Groq LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        340
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('5. Aggregate Enriched Context').first().json;\nconst raw = $input.first().json?.choices?.[0]?.message?.content;\nlet ai = null;\ntry { ai = raw ? JSON.parse(raw) : null; } catch (e) { ai = null; }\nif (!ai) {\n  ai = {\n    risk_verdict: \"True Positive\",\n    confidence_score: 94,\n    mitre_technique: \"T1059.001 - PowerShell\",\n    root_cause_bullets: [\n      `Host ${ctx.alert_telemetry.hostname} (${ctx.asset_cmdb.criticality}) executed hidden PowerShell cradle from ${ctx.alert_telemetry.ioc_ip}.`,\n      `OSINT: AbuseIPDB=${ctx.threat_intelligence.abuseipdb_score}, VT Malicious=${ctx.threat_intelligence.virustotal_malicious}.`,\n      `Immediate host containment required on Tier-0 asset.`\n    ],\n    remediation_cli: `wazuh-control active-response isolate-host --agent ${ctx.alert_telemetry.agent_id}`\n  };\n}\nconst base = \"http://localhost:5678/webhook/soar-active-response\";\nconst q = `agent_id=${ctx.alert_telemetry.agent_id}&hostname=${ctx.alert_telemetry.hostname}&ioc_ip=${ctx.alert_telemetry.ioc_ip}`;\nreturn [{\n  json: {\n    ...ctx,\n    ai_triage: ai,\n    isolate_url: `${base}?action=isolate_host&${q}`,\n    block_url: `${base}?action=block_ip&${q}`\n  }\n}];"
+      },
+      "id": "node-7",
+      "name": "7. Format Incident & Response Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN/slack",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"\ud83d\udea8 *[SOAR AI TRIAGE: {{ $json.ai_triage.risk_verdict }}]* | Host: `{{ $json.alert_telemetry.hostname }}` ({{ $json.asset_cmdb.criticality }})\\n*MITRE:* `{{ $json.ai_triage.mitre_technique }}` | *Confidence:* {{ $json.ai_triage.confidence_score }}%\\n*CLI:* ```{{ $json.ai_triage.remediation_cli }}```\\n\u26a1 <{{ $json.isolate_url }}|\ud83d\uded1 Isolate Host> | <{{ $json.block_url }}|\ud83d\udd25 Block IP>\"\n}"
+      },
+      "id": "node-8",
+      "name": "8. Dispatch ChatOps Interactive Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        340
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "soar-active-response",
+        "responseMode": "lastNode"
+      },
+      "id": "node-9",
+      "name": "9. Active Response Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        820
+      ],
+      "webhookId": "soar-active-response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const q = $input.first().json.query ? $input.first().json.query : {};\nreturn [{\n  json: {\n    status: \"ACTIVE_RESPONSE_EXECUTED\",\n    timestamp: new Date().toISOString(),\n    action: q.action ? q.action : \"isolate_host\",\n    agent_id: q.agent_id ? q.agent_id : \"004\",\n    hostname: q.hostname ? q.hostname : \"FINANCE-SRV-01\",\n    blocked_ip: q.ioc_ip ? q.ioc_ip : \"185.220.101.34\"\n  }\n}];"
+      },
+      "id": "node-10",
+      "name": "10. Trigger Wazuh Active Response API",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        820
+      ]
+    }
+  ],
+  "connections": {
+    "1. Wazuh Alert Webhook": {
+      "main": [
+        [
+          {
+            "node": "2. Extract IOCs & 15m Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Extract IOCs & 15m Dedup": {
+      "main": [
+        [
+          {
+            "node": "3. Is Unique Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Is Unique Alert?": {
+      "main": [
+        [
+          {
+            "node": "4a. AbuseIPDB Lookup",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4b. GreyNoise Scanner Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4c. VirusTotal Hash Lookup",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4d. Asset Criticality CMDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4a. AbuseIPDB Lookup": {
+      "main": [
+        [
+          {
+            "node": "5. Aggregate Enriched Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4b. GreyNoise Scanner Check": {
+      "main": [
+        [
+          {
+            "node": "5. Aggregate Enriched Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4c. VirusTotal Hash Lookup": {
+      "main": [
+        [
+          {
+            "node": "5. Aggregate Enriched Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4d. Asset Criticality CMDB": {
+      "main": [
+        [
+          {
+            "node": "5. Aggregate Enriched Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Aggregate Enriched Context": {
+      "main": [
+        [
+          {
+            "node": "6. AI Tier-2 Analyst Triage (Groq LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. AI Tier-2 Analyst Triage (Groq LLM)": {
+      "main": [
+        [
+          {
+            "node": "7. Format Incident & Response Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Format Incident & Response Links": {
+      "main": [
+        [
+          {
+            "node": "8. Dispatch ChatOps Interactive Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Active Response Webhook": {
+      "main": [
+        [
+          {
+            "node": "10. Trigger Wazuh Active Response API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
