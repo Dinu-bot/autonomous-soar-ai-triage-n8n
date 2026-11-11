@@ -1,0 +1,7 @@
+<!-- Wazuh Manager (/var/ossec/etc/ossec.conf) Custom n8n SOAR Integration -->
+<integration>
+  <name>custom-n8n.py</name>
+  <hook_url>http://host.docker.internal:5678/webhook/wazuh-soar-ingest</hook_url>
+  <level>10</level>
+  <alert_format>json</alert_format>
+</integration>

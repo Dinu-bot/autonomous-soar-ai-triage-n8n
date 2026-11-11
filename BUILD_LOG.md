@@ -59,3 +59,8 @@
 - **Engineering Fix:** Migrated `Node 8 (Dispatch ChatOps Interactive Card)` from raw JSON string interpolation (`specifyBody: "json"`) to structured key-value body parameters (`Using Fields Below` / `specifyBody: "keypair"`), delegating RFC 8259 backslash and quote escaping to n8n's native serializer before posting to Discord's `/slack` webhook adapter.
 - **Verification:** Confirmed `200 OK` (`"ok"`) response from Discord API and verified live interactive incident card rendering in the SOC Discord server (`Confidence: 0.93`, `MITRE: T1059.001`).
 - **Evidence:** `docs/screenshots/05_discord_chatops_alert_card.jpeg`
+
+### Milestone 1.7 — Human-in-the-Loop Active Response Webhook (`Nodes 9 & 10`) & Custom Wazuh Bridge
+- **Action:** Verified `GET /webhook/soar-active-response` and `/webhook-test/soar-active-response` (`action=isolate_host`, `agent_id=004`, `hostname=FINANCE-SRV-01`, `ioc_ip=89.248.165.131`), confirming query parameter extraction (`Node 9`) and downstream Active Response execution (`Node 10` -> `status: "ACTIVE_RESPONSE_EXECUTED"`).
+- **Wazuh Integration Bridge:** Authored `integrations/custom-n8n.py` and `integrations/ossec_integration_snippet.xml` to forward Level 10+ Wazuh alerts directly into the n8n ingestion webhook.
+- **Evidence:** `docs/screenshots/06_active_response_webhook.png` & `docs/screenshots/07_active_response_executed.png`
