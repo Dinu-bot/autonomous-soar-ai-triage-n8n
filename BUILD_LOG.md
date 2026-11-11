@@ -41,3 +41,15 @@
 ### Milestone 1.3 — Stage 1: Webhook Ingestion, IOC Regex Extraction & 15-Min Deduplication
 - **Action:** Configured `POST /webhook/wazuh-soar-ingest` and engineered a JavaScript normalization node to extract `ioc_ip`, Sysmon/FIM `SHA256` hashes via regex (`/SHA256=([a-fA-F0-9]{64})/i`), `hostname`, and `command_line`.
 - **Alert Fatigue Guardrail:** Implemented a stateful 15-minute (900,000 ms) TTL deduplication cache using `$getWorkflowStaticData('global')` keyed on `${hostname}_${ruleId}_${iocPart}`.
+
+### Milestone 1.4 — Stage 2 & 3: OSINT Threat Intelligence & Internal Asset CMDB Correlation
+- **GreyNoise Community API Bypass:** Verified that `GET https://api.greynoise.io/v3/community/{ip}` supports unauthenticated queries from residential IPs without requiring corporate domain registration. Disabled header injection on `Node 4b` to query scanner status cleanly.
+- **Asset Criticality CMDB (`Node 4d`):** Engineered an internal asset classification lookup mapping `FINANCE-SRV-01` to `CRITICAL (Tier-0 Crown Jewel)` so downstream LLM triage weighs business impact alongside technical severity.
+
+### Milestone 1.5 — Stage 4: Groq LLM (`openai/gpt-oss-120b`) Structured JSON Triage
+- **Troubleshooting `401 Invalid API Key` & Model Deprecation:**
+  1. Diagnosed initial `401 Unauthorized` response (`docs/screenshots/04a_groq_401_auth_debug.png`) and migrated `Node 6` to n8n's native `Generic Credential Type -> Bearer Auth`.
+  2. Inspected Groq platform API logs and identified `model_not_found` for legacy `llama-3.3-70b-versatile`.
+  3. Migrated inference payload to OpenAI's flagship 120B open-weight reasoning model on Groq (`openai/gpt-oss-120b`) with `"response_format": {"type": "json_object"}` and `temperature: 0.1`.
+- **Verification:** Executed live alert triage against IOC `89.248.165.131`. Confirmed `openai/gpt-oss-120b` returned both Chain-of-Thought `reasoning` and strict JSON `content` containing `risk_verdict`, `mitre_technique: "T1059.001"`, `root_cause_bullets`, and PowerShell firewall containment commands.
+- **Evidence:** `docs/screenshots/04_groq_ai_json_verdict.png`

@@ -106,19 +106,7 @@
       "parameters": {
         "method": "GET",
         "url": "=https://api.greynoise.io/v3/community/{{ $('2. Extract IOCs & 15m Dedup').first().json.ioc_ip }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "key",
-              "value": "YOUR_GREYNOISE_API_KEY"
-            },
-            {
-              "name": "Accept",
-              "value": "application/json"
-            }
-          ]
-        }
+        "sendHeaders": false
       },
       "id": "node-4b",
       "name": "4b. GreyNoise Scanner Check",
@@ -199,7 +187,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": 0.1,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Act as a Senior Tier-2 SOC Analyst. Output strictly valid JSON with keys: risk_verdict, confidence_score, mitre_technique, root_cause_bullets (array of 3 strings), remediation_cli.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(JSON.stringify($json)) }}\n    }\n  ]\n}"
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": 0.1,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Act as a Senior Tier-2 SOC Analyst. Output strictly valid JSON with keys: risk_verdict, confidence_score, mitre_technique, root_cause_bullets (array of 3 strings), remediation_cli.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(JSON.stringify($json)) }}\n    }\n  ]\n}"
       },
       "id": "node-6",
       "name": "6. AI Tier-2 Analyst Triage (Groq LLM)",
