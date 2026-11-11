@@ -53,3 +53,9 @@
   3. Migrated inference payload to OpenAI's flagship 120B open-weight reasoning model on Groq (`openai/gpt-oss-120b`) with `"response_format": {"type": "json_object"}` and `temperature: 0.1`.
 - **Verification:** Executed live alert triage against IOC `89.248.165.131`. Confirmed `openai/gpt-oss-120b` returned both Chain-of-Thought `reasoning` and strict JSON `content` containing `risk_verdict`, `mitre_technique: "T1059.001"`, `root_cause_bullets`, and PowerShell firewall containment commands.
 - **Evidence:** `docs/screenshots/04_groq_ai_json_verdict.png`
+
+### Milestone 1.6 — Stage 5: Discord ChatOps Dispatch & Windows Backslash JSON Serialization Fix
+- **Bug Observed:** When `openai/gpt-oss-120b` generated Windows PowerShell remediation commands containing unescaped file path backslashes (`Remove-Item -Path 'C:\Windows\Temp\payload.ps1'`), raw string interpolation inside `Node 8`'s JSON body threw `JSON parameter needs to be valid JSON`.
+- **Engineering Fix:** Migrated `Node 8 (Dispatch ChatOps Interactive Card)` from raw JSON string interpolation (`specifyBody: "json"`) to structured key-value body parameters (`Using Fields Below` / `specifyBody: "keypair"`), delegating RFC 8259 backslash and quote escaping to n8n's native serializer before posting to Discord's `/slack` webhook adapter.
+- **Verification:** Confirmed `200 OK` (`"ok"`) response from Discord API and verified live interactive incident card rendering in the SOC Discord server (`Confidence: 0.93`, `MITRE: T1059.001`).
+- **Evidence:** `docs/screenshots/05_discord_chatops_alert_card.jpeg`

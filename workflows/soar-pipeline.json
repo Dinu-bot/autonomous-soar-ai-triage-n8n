@@ -217,8 +217,15 @@
         "method": "POST",
         "url": "https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN/slack",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"\ud83d\udea8 *[SOAR AI TRIAGE: {{ $json.ai_triage.risk_verdict }}]* | Host: `{{ $json.alert_telemetry.hostname }}` ({{ $json.asset_cmdb.criticality }})\\n*MITRE:* `{{ $json.ai_triage.mitre_technique }}` | *Confidence:* {{ $json.ai_triage.confidence_score }}%\\n*CLI:* ```{{ $json.ai_triage.remediation_cli }}```\\n\u26a1 <{{ $json.isolate_url }}|\ud83d\uded1 Isolate Host> | <{{ $json.block_url }}|\ud83d\udd25 Block IP>\"\n}"
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=\ud83d\udea8 *[SOAR AI TRIAGE: {{ $json.ai_triage.risk_verdict }}]* \u000bert{} Host: `{{ $json.alert_telemetry.hostname }}` ({{ $json.asset_cmdb.criticality }})\n*MITRE:* `{{ $json.ai_triage.mitre_technique }}` | *Confidence:* {{ $json.ai_triage.confidence_score }}\n*Root Cause Analysis:*\n\u2022 {{$json.ai_triage.root_cause_bullets[0] }}\n\u2022 {{ $json.ai_triage.root_cause_bullets[1] }}\n\u2022 {{$json.ai_triage.root_cause_bullets[2] }}\n*Remediation CLI:*\n```{{ $json.ai_triage.remediation_cli }}```\n\u26a1 *Active Response:* <{{ $json.isolate_url }}|\ud83d\uded1 Isolate Host> | <{{ $json.block_url }}|\ud83d\udd25 Block IP>"
+            }
+          ]
+        }
       },
       "id": "node-8",
       "name": "8. Dispatch ChatOps Interactive Card",
